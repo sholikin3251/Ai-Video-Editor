@@ -5,43 +5,36 @@ import os
 def make_vertical_safe(clip):
     try:
         w, h = clip.size
-        # Jika sudah potrait (Tinggi > Lebar), jangan diapa-apain
-        if h > w:
-            return clip
-            
-        # Hitung target lebar untuk rasio 9:16
-        new_width = h * (9/16)
+        if h > w: return clip # Sudah potrait
         
-        # Pengaman: Kalau hasil hitungan aneh, pakai lebar asli
-        if new_width > w:
-            new_width = w
+        # Hitung lebar 9:16
+        new_width = h * (9/16)
+        if new_width > w: new_width = w
             
-        # Titik potong X (tengah)
         center_x = w / 2
         x1 = center_x - (new_width / 2)
         
-        # Lakukan Crop
         return clip.crop(x1=x1, y1=0, width=new_width, height=h)
     except Exception as e:
-        print(f"   ⚠️ Gagal Crop Potrait: {e}. Menggunakan klip asli.")
+        print(f"   ⚠️ Gagal Crop: {e}. Pakai asli.")
         return clip
 
 def proses_video_otomatis(input_path, output_path, data_json):
-    print(f"✂️  Mulai memproses video: {input_path}")
+    print(f"✂️  Mulai memproses: {input_path}")
     
     video_asli = None
     try:
         video_asli = VideoFileClip(input_path)
     except Exception as e:
-        print(f"❌ Error Fatal: Tidak bisa baca video. {e}")
+        print(f"❌ Error Buka Video: {e}")
         return None
 
     clips = []
     segmen_list = data_json.get('segments', [])
 
-    # Jika AI diam saja, kita paksa ambil 5 detik pertama (Hook manual)
+    # Auto-Hook jika AI diam
     if not segmen_list:
-        print("⚠️ AI tidak response. Membuat 'Auto-Hook' 5 detik pertama.")
+        print("⚠️ AI diam. Auto-Hook 5 detik.")
         segmen_list = [{"start": 0, "end": 5, "description": "Auto-Hook"}]
 
     for segmen in segmen_list:
@@ -49,46 +42,46 @@ def proses_video_otomatis(input_path, output_path, data_json):
             start = float(segmen.get('start', 0))
             end = float(segmen.get('end', 0))
             
-            # Validasi Waktu
             if start >= end: continue
             if end > video_asli.duration: end = video_asli.duration
             
-            # 1. Potong
+            # Potong & Crop
             potongan = video_asli.subclip(start, end)
-            
-            # 2. Coba ubah jadi Potrait (9:16)
             potongan_final = make_vertical_safe(potongan)
             
             clips.append(potongan_final)
-            print(f"   -> Oke: {start:.1f}s - {end:.1f}s")
+            print(f"   -> Oke: {start:.1f} - {end:.1f}")
             
-        except Exception as e:
-            print(f"   ⚠️ Skip segmen error: {e}")
+        except Exception:
+            pass # Skip error kecil
 
     # GABUNGKAN
     if len(clips) > 0:
         print(f"🔨 Menyambungkan {len(clips)} klip...")
         try:
-            # Method="compose" lebih aman untuk ukuran beda-beda
-            video_final = concatenate_videoclips(clips, method="compose")
+            final = concatenate_videoclips(clips, method="compose")
             
-            video_final.write_videofile(
+            # --- BAGIAN PENTING: SETTING RENDER AMAN ---
+            final.write_videofile(
                 output_path, 
                 fps=24, 
                 codec='libx264', 
                 audio_codec='aac',
-                temp_audiofile='temp-audio.m4a',
-                remove_temp=True,
-                preset='ultrafast' # Biar render cepat
+                threads=1,       # <--- WAJIB 1 AGAR TIDAK KORUP DI WINDOWS
+                preset='medium', # Jangan ultrafast, biar header file rapi
+                verbose=False,
+                logger=None      # Biar terminal bersih
             )
+            # -------------------------------------------
+            
             video_asli.close()
-            print(f"✅ SUKSES! Video ada di: {output_path}")
+            final.close() # Pastikan ditutup
+            print(f"✅ SUKSES! File aman di: {output_path}")
             return output_path
         except Exception as e:
-            print(f"❌ Gagal Render Akhir: {e}")
+            print(f"❌ Gagal Render: {e}")
             video_asli.close()
-            return input_path # Balikin file asli kalau render gagal
+            return input_path 
     else:
-        print("⚠️ Tidak ada klip. Balikin file asli.")
         video_asli.close()
         return input_path
