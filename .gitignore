@@ -1,0 +1,20 @@
+# Folder Sampah Python
+venv/
+__pycache__/
+*.pyc
+
+# Folder Sampah Node.js (React)
+node_modules/
+dist/
+.DS_Store
+
+# File Environment (RAHASIA! Jangan di-upload)
+.env
+
+# Folder Upload & Hasil Video (Berat)
+backend/uploads/
+backend/results/
+backend/temp/
+
+# Video test
+*.mp4
