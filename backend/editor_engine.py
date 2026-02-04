@@ -4,52 +4,51 @@ import os
 from moviepy.editor import VideoFileClip, concatenate_videoclips
 import os
 
+from moviepy.editor import VideoFileClip, concatenate_videoclips
+import os
+
 def proses_video_otomatis(input_path, output_path, data_json):
     """
-    Fungsi ini memotong video dengan pengaman (Safety Nets).
+    Versi Anti-Gagal: Jika gagal edit, kembalikan video asli.
     """
     print(f"✂️  Mulai memproses video: {input_path}")
     
+    video_asli = None
     try:
         video_asli = VideoFileClip(input_path)
-    except OSError:
-        print("❌ Error: File video tidak bisa dibaca.")
+    except Exception as e:
+        print(f"❌ Kritis: Tidak bisa membuka video asli. {e}")
         return None
 
     clips = []
     
-    # 2. Loop setiap segmen dari JSON
-    for segmen in data_json.get('segments', []): # Pakai .get biar gak error kalau JSON kosong
-        start = segmen['start']
-        end = segmen['end']
-        deskripsi = segmen.get('description', '-')
-        
-        # Validasi dasar
-        if start >= end:
-            continue
-            
-        durasi = end - start
-        
-        # --- FILTER YANG LEBIH LEMBUT ---
-        # Kita turunkan jadi 0.5 detik biar gak terlalu galak
-        if durasi < 0.5: 
-            print(f"   ⚠️ SKIP: Terlalu pendek ({durasi:.2f}s) - {deskripsi}")
-            continue
-        # --------------------------------
+    # Ambil segmen dari JSON
+    segmen_list = data_json.get('segments', [])
+    
+    # Jika AI tidak memberi segmen, atau list kosong
+    if not segmen_list:
+        print("⚠️ AI tidak memberikan instruksi potong. Mengembalikan video asli.")
+        video_asli.close()
+        return input_path # <--- FAIL SAFE 1
 
-        print(f"   -> Ambil: {start} s.d {end} ({deskripsi})")
-        
+    for segmen in segmen_list:
         try:
-            # Safety: Jangan sampai minta detik yang melebihi durasi video asli
-            if end > video_asli.duration:
-                end = video_asli.duration
+            start = float(segmen.get('start', 0))
+            end = float(segmen.get('end', 0))
             
+            # Validasi durasi
+            if start >= end: continue
+            if end > video_asli.duration: end = video_asli.duration
+            
+            # Potong tanpa filter durasi minimal (biar pasti ada hasil)
             potongan = video_asli.subclip(start, end)
             clips.append(potongan)
+            print(f"   -> Oke: {start:.2f} - {end:.2f}")
+            
         except Exception as e:
-            print(f"   ⚠️ Gagal memotong bagian ini: {e}")
+            print(f"   ⚠️ Gagal potong segmen ini: {e}")
 
-    # 3. Gabungkan Semua Potongan
+    # GABUNGKAN
     if len(clips) > 0:
         print(f"🔨 Menyambungkan {len(clips)} potongan...")
         try:
@@ -60,19 +59,18 @@ def proses_video_otomatis(input_path, output_path, data_json):
                 codec='libx264', 
                 audio_codec='aac',
                 temp_audiofile='temp-audio.m4a',
-                remove_temp=True
+                remove_temp=True,
+                verbose=False,
+                logger=None # Supaya terminal tidak penuh spam
             )
             video_asli.close()
-            print(f"✅ Video Selesai! Disimpan di: {output_path}")
+            print(f"✅ Sukses! Video baru di: {output_path}")
             return output_path
         except Exception as e:
             print(f"❌ Gagal Render: {e}")
             video_asli.close()
-            return None
+            return input_path # <--- FAIL SAFE 2 (Kembalikan asli jika render gagal)
     else:
-        # --- PENGAMAN TERAKHIR ---
-        # Jika AI tidak menemukan momen bagus (list kosong),
-        # Jangan error, tapi kembalikan video asli saja (atau return None dengan pesan jelas)
-        print("⚠️ AI tidak menemukan momen menarik, atau semua terfilter.")
+        print("⚠️ Tidak ada potongan valid. Mengembalikan video asli.")
         video_asli.close()
-        return None
+        return input_path # <--- FAIL SAFE 3
