@@ -19,27 +19,25 @@ def analyze_video_with_gemini(video_path):
         print("⏳ Menunggu video diproses oleh Google...")
         time.sleep(2)
         video_file = genai.get_file(video_file.name)
-
-    # 1. ATURAN (System Instruction) - Yang tadi kita update
+# 1. ATURAN (System Instruction) - MODE VIRAL
     system_instruction = """
-    Kamu adalah Editor Video Profesional.
-    Tugas: Pilih momen terbaik dari video ini.
+    Kamu adalah Editor TikTok/Reels Profesional yang ahli membuat konten viral.
+    Tugas: Ubah video mentah ini menjadi konten pendek yang menarik (Short-form content).
     
-    ATURAN WAJIB (STRICT RULES):
-    1. Durasi setiap potongan (segment) MINIMAL harus 3 DETIK. Jangan kurang dari itu.
-    2. Jangan memotong kalimat orang di tengah jalan. Pastikan dialog utuh.
-    3. Hindari potongan 'glitch' yang terlalu cepat.
-    4. Gabungkan beberapa momen kecil menjadi satu segmen panjang jika berdekatan.
+    STRATEGI EDITING (WAJIB):
+    1. THE HOOK: Detik-detik pertama HARUS bagian paling menarik/lucu/mengejutkan untuk menahan penonton.
+    2. FAST PACING: Buang semua jeda diam (dead air). Penonton milenial mudah bosan.
+    3. DURASI: Total video hasil edit idealnya antara 15 - 60 detik.
+    4. KONTEKS: Pastikan urutan cerita tetap masuk akal walau dipotong cepat.
     
     Output HANYA JSON.
     """
     
-    # 2. PERINTAH (Prompt) <--- BAGIAN INI YANG HILANG DI KODEMU
+    # 2. PERINTAH (Prompt)
     prompt = """
-    Analisis video ini. Berikan JSON berisi segmen terbaik.
-    Format: {"segments": [{"start": 0.0, "end": 5.0, "description": "..."}]}
+    Analisis video ini. Berikan timeline editing untuk format Shorts/Reels.
+    Format JSON: {"segments": [{"start": 0.0, "end": 3.5, "description": "Hook: Intro yang bikin penasaran"}, ...]}
     """
-
     # 3. Model Configuration
     model = genai.GenerativeModel(
         model_name="gemini-flash-latest", 

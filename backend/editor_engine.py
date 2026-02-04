@@ -1,19 +1,9 @@
-from moviepy.editor import VideoFileClip, concatenate_videoclips
-import os
-
-from moviepy.editor import VideoFileClip, concatenate_videoclips
-import os
-
-from moviepy.editor import VideoFileClip, concatenate_videoclips
+from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx
 import os
 
 def proses_video_otomatis(input_path, output_path, data_json):
-    """
-    Versi Anti-Gagal: Jika gagal edit, kembalikan video asli.
-    """
-    print(f"✂️  Mulai memproses video: {input_path}")
+    print(f"✂️  Mulai memproses video (Mode Viral): {input_path}")
     
-    video_asli = None
     try:
         video_asli = VideoFileClip(input_path)
     except Exception as e:
@@ -21,38 +11,60 @@ def proses_video_otomatis(input_path, output_path, data_json):
         return None
 
     clips = []
-    
-    # Ambil segmen dari JSON
     segmen_list = data_json.get('segments', [])
     
-    # Jika AI tidak memberi segmen, atau list kosong
     if not segmen_list:
-        print("⚠️ AI tidak memberikan instruksi potong. Mengembalikan video asli.")
+        print("⚠️ AI tidak memberikan instruksi. Return asli.")
         video_asli.close()
-        return input_path # <--- FAIL SAFE 1
+        return input_path
+
+    # --- LOGIKA AUTO-CROP 9:16 (TIKTOK STYLE) ---
+    def make_vertical(clip):
+        # Cek apakah video sudah vertical?
+        w, h = clip.size
+        if h > w:
+            return clip # Sudah vertical, biarkan
+        
+        # Jika landscape, kita potong tengahnya
+        new_width = h * (9/16) # Hitung lebar ideal untuk rasio 9:16
+        
+        # Pastikan tidak error kalau videonya terlalu 'gepeng'
+        if new_width > w:
+            new_width = w 
+
+        # Lakukan Crop Center
+        return clip.crop(x1=(w/2 - new_width/2), y1=0, width=new_width, height=h)
 
     for segmen in segmen_list:
         try:
             start = float(segmen.get('start', 0))
             end = float(segmen.get('end', 0))
             
-            # Validasi durasi
             if start >= end: continue
             if end > video_asli.duration: end = video_asli.duration
             
-            # Potong tanpa filter durasi minimal (biar pasti ada hasil)
+            # 1. Potong Sesuai Waktu
             potongan = video_asli.subclip(start, end)
-            clips.append(potongan)
-            print(f"   -> Oke: {start:.2f} - {end:.2f}")
+            
+            # 2. Ubah Jadi Vertical (Potrait)
+            potongan_vertical = make_vertical(potongan)
+            
+            # 3. Resize ke HD (1080x1920) biar tajam di HP (Opsional, tapi bagus)
+            # potongan_final = potongan_vertical.resize(height=1920) 
+            # (Kita skip resize dulu biar render cepat)
+            
+            clips.append(potongan_vertical)
             
         except Exception as e:
-            print(f"   ⚠️ Gagal potong segmen ini: {e}")
+            print(f"   ⚠️ Gagal segmen: {e}")
 
     # GABUNGKAN
     if len(clips) > 0:
-        print(f"🔨 Menyambungkan {len(clips)} potongan...")
+        print(f"🔨 Menyambungkan {len(clips)} klip viral...")
         try:
             video_final = concatenate_videoclips(clips)
+            
+            # Render dengan preset 'ultrafast' biar nunggunya gak lama
             video_final.write_videofile(
                 output_path, 
                 fps=24, 
@@ -60,17 +72,15 @@ def proses_video_otomatis(input_path, output_path, data_json):
                 audio_codec='aac',
                 temp_audiofile='temp-audio.m4a',
                 remove_temp=True,
-                verbose=False,
-                logger=None # Supaya terminal tidak penuh spam
+                preset='ultrafast',
+                threads=4
             )
             video_asli.close()
-            print(f"✅ Sukses! Video baru di: {output_path}")
             return output_path
         except Exception as e:
             print(f"❌ Gagal Render: {e}")
             video_asli.close()
-            return input_path # <--- FAIL SAFE 2 (Kembalikan asli jika render gagal)
+            return input_path
     else:
-        print("⚠️ Tidak ada potongan valid. Mengembalikan video asli.")
         video_asli.close()
-        return input_path # <--- FAIL SAFE 3
+        return input_path
