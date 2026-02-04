@@ -36,29 +36,45 @@ def upload_video():
             file.save(input_path)
             print(f"📥 File diterima: {filename}")
 
-            # 2. Panggil AI (Otak)
+            # 2. Panggil AI
             print("🧠 Sedang meminta instruksi AI...")
-            data_edit = analyze_video_with_gemini(input_path)
+            # Kita bungkus try-except biar kalau AI error, tetap lanjut
+            try:
+                data_edit = analyze_video_with_gemini(input_path)
+            except Exception as e:
+                print(f"⚠️ AI Error: {e}, menggunakan default.")
+                data_edit = {"segments": []} # Default kosong
 
-            # 3. Panggil Editor (Otot)
+            # 3. Panggil Editor
             output_filename = f"edited_{filename}"
             output_path = os.path.join(app.config['RESULTS_FOLDER'], output_filename)
             
-            print("✂️ Sedang memotong video...")
-            final_video_path = proses_video_otomatis(input_path, output_path, data_edit)
+            print("✂️ Sedang memproses video...")
+            final_path = proses_video_otomatis(input_path, output_path, data_edit)
 
-            if final_video_path:
-                # Kirim URL download ke Frontend
+            if final_path:
+                # Cek apakah yang dikembalikan adalah file asli atau file edit
+                final_filename = os.path.basename(final_path)
+                
+                # Jika file aslinya ada di folder uploads, tapi Flask butuh akses, 
+                # kita harus pastikan endpoint download bisa mengaksesnya.
+                # Sederhananya: Kita copy file final ke folder results jika belum ada disitu.
+                if final_filename != output_filename:
+                     # Ini artinya logic Fail-Safe berjalan (video asli dikembalikan)
+                     import shutil
+                     shutil.copy(input_path, output_path)
+                     final_filename = output_filename
+
                 return jsonify({
                     "message": "Sukses!",
-                    "download_url": f"http://localhost:5000/download/{output_filename}",
+                    "download_url": f"http://localhost:5000/download/{final_filename}",
                     "ai_analysis": data_edit
                 })
             else:
-                return jsonify({"error": "Gagal mengedit video"}), 500
+                return jsonify({"error": "Gagal total memproses video"}), 500
 
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"❌ Server Error: {e}")
             return jsonify({"error": str(e)}), 500
 
 @app.route('/download/<filename>')
